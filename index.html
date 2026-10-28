@@ -138,6 +138,12 @@ const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.get
 const addM = (m, k) => { const [y,mo] = m.split('-').map(Number); const t = y*12 + mo-1 + k; return `${Math.floor(t/12)}-${pad(t%12+1)}`; };
 const nombreMes = m => { const [y,mo] = m.split('-').map(Number); return new Date(y, mo-1, 1).toLocaleDateString('es-AR', { month:'long', year:'numeric' }); };
 function parseMonto(s){ s = String(s).trim().replace(/\$|\s/g,''); if (s.includes(',')) s = s.replace(/\./g,'').replace(',', '.'); return Number(s); }
+// Google Sheets a veces convierte "2026-10" o "2026-10-28" en fecha; esto lo vuelve a normalizar
+function aFecha(v){ const d = new Date(v); return isNaN(d) ? null : d; }
+function normMes(v){ v = String(v||'').trim(); if (/^\d{4}-\d{2}$/.test(v)) return v; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,7);
+  const d = aFecha(v); return d ? `${d.getFullYear()}-${pad(d.getMonth()+1)}` : ''; }
+function normFecha(v){ v = String(v||'').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = aFecha(v); return d ? `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` : hoy(); }
 function guardar(k,v){ try{ v===null ? localStorage.removeItem(k) : localStorage.setItem(k,v); }catch(e){} }
 function leer(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.remove('hide'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.add('hide'),2200); }
@@ -153,7 +159,11 @@ async function api(body){
     : await fetch(API_URL + '?clave=' + encodeURIComponent(clave));
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Error');
-  rows = j.rows.map(r => ({ ...r, monto:+r.monto||0, cuotas:Math.max(1,+r.cuotas||1), pctA: r.pctA===''?50:+r.pctA }));
+  rows = j.rows.map(r => {
+    const fecha = normFecha(r.fecha);
+    return { ...r, fecha, primerMes: normMes(r.primerMes) || fecha.slice(0,7),
+      monto: parseMonto(r.monto)||0, cuotas: Math.max(1, parseInt(r.cuotas)||1), pctA: r.pctA===''||isNaN(+r.pctA) ? 50 : +r.pctA };
+  });
   return j;
 }
 
